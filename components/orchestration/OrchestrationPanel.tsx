@@ -7,6 +7,7 @@ import { ContainerIcon } from '../icons/ContainerIcon';
 import { RobotIcon } from '../icons/RobotIcon';
 import { YamlIcon } from '../icons/YamlIcon';
 import { FileIcon } from '../icons/FileIcon';
+import Input from '../ui/Input';
 
 // --- Configuration Data based on user prompt ---
 
@@ -153,6 +154,8 @@ const OrchestrationPanel: React.FC = () => {
   );
   const [handover, setHandover] = useState<any>(INITIAL_HANDOVER);
   const [containerInfo, setContainerInfo] = useState<{ id: string | null, status: ContainerStatus }>({ id: null, status: 'inactive' });
+  const [apiName, setApiName] = useState<string>('');
+  const [apiKey, setApiKey] = useState<string>('');
   
   const timerRef = useRef<number | null>(null);
   const currentAgent = WORKFLOW[currentStep]?.agent as AgentName | undefined;
@@ -289,9 +292,36 @@ const OrchestrationPanel: React.FC = () => {
                    </div>
                 </Section>
                 <Section title="Container" icon={<ContainerIcon className="w-5 h-5" />}>
-                    <div className={`p-3 rounded-md border-l-4 h-full flex flex-col justify-center ${getStatusColor(containerInfo.status)}`}>
+                    <div className={`p-3 rounded-md border-l-4 mb-4 ${getStatusColor(containerInfo.status)}`}>
                         <p className="font-bold uppercase">{containerInfo.status}</p>
                         <p className="text-sm text-text-secondary truncate" title={containerInfo.id || undefined}>{containerInfo.id || 'No container'}</p>
+                    </div>
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-semibold text-text-secondary">Environment Variables</h4>
+                      <div>
+                          <label htmlFor="apiName" className="block text-xs font-medium text-gray-400 mb-1">API_NAME</label>
+                          <Input
+                              id="apiName"
+                              type="text"
+                              value={apiName}
+                              onChange={(e) => setApiName(e.target.value)}
+                              disabled={isSimulating}
+                              className="!py-1.5 !text-sm"
+                              placeholder="e.g., gemini-2.5-flash"
+                          />
+                      </div>
+                      <div>
+                          <label htmlFor="apiKey" className="block text-xs font-medium text-gray-400 mb-1">API_KEY</label>
+                          <Input
+                              id="apiKey"
+                              type="password"
+                              value={apiKey}
+                              onChange={(e) => setApiKey(e.target.value)}
+                              disabled={isSimulating}
+                              className="!py-1.5 !text-sm"
+                              placeholder="Enter your API key"
+                          />
+                      </div>
                     </div>
                 </Section>
             </div>
