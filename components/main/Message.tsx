@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Message as MessageType } from '../../types';
 import { RobotIcon } from '../icons/RobotIcon';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import CodeBlock from '../ui/CodeBlock';
+import { CopyIcon } from '../icons/CopyIcon';
+import { CheckIcon } from '../icons/CheckIcon';
 
 
 interface MessageProps {
@@ -12,7 +14,15 @@ interface MessageProps {
 }
 
 const Message: React.FC<MessageProps> = ({ message, isStreaming }) => {
+  const [isCopied, setIsCopied] = useState(false);
   const isUser = message.role === 'user';
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(message.content).then(() => {
+        setIsCopied(true);
+        setTimeout(() => setIsCopied(false), 2000);
+    });
+  };
 
   return (
     <div className={`flex items-start gap-4 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
@@ -38,8 +48,24 @@ const Message: React.FC<MessageProps> = ({ message, isStreaming }) => {
             />
          </div>
          { !isUser && message.createdAt && (
-            <div className={`text-xs mt-1 px-4 pb-2 text-right text-gray-400`}>
-              {new Date(message.createdAt).toLocaleTimeString()}
+            <div className={`flex justify-end items-center gap-4 text-xs mt-1 px-4 pb-2 text-gray-400`}>
+               <button
+                className="inline-flex items-center gap-1.5 hover:text-white disabled:opacity-100 transition-colors"
+                onClick={handleCopy}
+                disabled={isCopied}
+                title="Copy message content"
+              >
+                  {isCopied ? (
+                      <span className="inline-flex items-center gap-1.5 text-green-400">
+                          <CheckIcon className="h-4 w-4" /> Copied
+                      </span>
+                  ) : (
+                      <>
+                          <CopyIcon className="h-4 w-4" /> Copy
+                      </>
+                  )}
+              </button>
+              <span>{new Date(message.createdAt).toLocaleTimeString()}</span>
             </div>
           )
          }

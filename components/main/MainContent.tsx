@@ -84,6 +84,7 @@ const MainContent: React.FC<MainContentProps> = (props) => {
                         messages={props.messages}
                         isStreaming={props.isStreaming}
                         onSendMessage={props.onSendMessage}
+                        onToggleBookmark={onToggleBookmark}
                     />
                 ) : (
                     <div className="flex flex-col items-center justify-center h-full text-center p-8">

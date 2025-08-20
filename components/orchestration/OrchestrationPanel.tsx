@@ -8,6 +8,7 @@ import { RobotIcon } from '../icons/RobotIcon';
 import { YamlIcon } from '../icons/YamlIcon';
 import { FileIcon } from '../icons/FileIcon';
 import Input from '../ui/Input';
+import SuggestionPanel from './SuggestionPanel';
 
 // --- Configuration Data based on user prompt ---
 
@@ -137,7 +138,7 @@ const WORKFLOW = [
 const INITIAL_HANDOVER = {
   container_id: null,
   operator: "andoy",
-  prompt: "Build fancy to-do app with React + Tailwind + IndexedDB",
+  prompt: "Build a documentation platform for a mid-size business",
   chosen_templates: null,
   history: [],
 };
@@ -174,6 +175,7 @@ const OrchestrationPanel: React.FC = () => {
     if (stepIndex >= WORKFLOW.length) {
       setIsSimulating(false);
       setAgentStatus(prev => Object.keys(prev).reduce((acc, key) => ({ ...acc, [key]: 'idle' }), {} as any));
+      setCurrentStep(WORKFLOW.length); // Set to a "finished" step index
       return;
     }
 
@@ -247,8 +249,8 @@ const OrchestrationPanel: React.FC = () => {
     }
   }
 
-  const Section: React.FC<{title: string, icon: React.ReactNode, children: React.ReactNode}> = ({ title, icon, children }) => (
-    <div className="bg-black/20 rounded-lg p-4 flex flex-col border border-border h-full">
+  const Section: React.FC<{title: string, icon: React.ReactNode, children: React.ReactNode, className?: string}> = ({ title, icon, children, className }) => (
+    <div className={`bg-black/20 rounded-lg p-4 flex flex-col border border-border h-full ${className}`}>
         <h3 className="text-lg font-semibold mb-3 flex items-center gap-2 text-text-secondary flex-shrink-0">
             {icon}
             {title}
@@ -273,63 +275,71 @@ const OrchestrationPanel: React.FC = () => {
         <Button variant="secondary" onClick={resetState} disabled={isSimulating}>Reset</Button>
       </div>
 
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-0">
-        <div className="grid grid-rows-2 gap-6 min-h-0">
-            <Section title="System Configuration" icon={<YamlIcon className="w-5 h-5" />}>
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 min-h-0">
+        {/* Column 1: Config & Agents */}
+        <div className="flex flex-col gap-6 min-h-0">
+            <Section title="System Configuration" icon={<YamlIcon className="w-5 h-5" />} className="flex-1">
                 <CodeBlock className="language-yaml" children={currentAgent ? AGENT_MODULES[currentAgent] : ORCHESTRATION_YAML} />
                 <p className="text-xs text-center text-gray-500 mt-2">Displaying <strong>{currentAgent ? `${currentAgent}.yaml` : 'orchestration.yaml'}</strong></p>
             </Section>
 
-            <div className="grid grid-cols-2 gap-6">
-                <Section title="Agents" icon={<RobotIcon className="w-5 h-5" />}>
-                   <div className="space-y-3">
-                    {Object.entries(AGENTS).map(([id, agent]) => (
-                        <div key={id} className={`p-3 rounded-md border-l-4 transition-colors ${getStatusColor(agentStatus[id as AgentName])}`}>
-                            <p className="font-bold">{agent.name}</p>
-                            <p className="text-sm text-text-secondary">{agent.role}</p>
-                        </div>
-                    ))}
-                   </div>
-                </Section>
-                <Section title="Container" icon={<ContainerIcon className="w-5 h-5" />}>
-                    <div className={`p-3 rounded-md border-l-4 mb-4 ${getStatusColor(containerInfo.status)}`}>
-                        <p className="font-bold uppercase">{containerInfo.status}</p>
-                        <p className="text-sm text-text-secondary truncate" title={containerInfo.id || undefined}>{containerInfo.id || 'No container'}</p>
+            <Section title="Agents" icon={<RobotIcon className="w-5 h-5" />}>
+               <div className="space-y-3">
+                {Object.entries(AGENTS).map(([id, agent]) => (
+                    <div key={id} className={`p-3 rounded-md border-l-4 transition-colors ${getStatusColor(agentStatus[id as AgentName])}`}>
+                        <p className="font-bold">{agent.name}</p>
+                        <p className="text-sm text-text-secondary">{agent.role}</p>
                     </div>
-                    <div className="space-y-3">
-                      <h4 className="text-sm font-semibold text-text-secondary">Environment Variables</h4>
-                      <div>
-                          <label htmlFor="apiName" className="block text-xs font-medium text-gray-400 mb-1">API_NAME</label>
-                          <Input
-                              id="apiName"
-                              type="text"
-                              value={apiName}
-                              onChange={(e) => setApiName(e.target.value)}
-                              disabled={isSimulating}
-                              className="!py-1.5 !text-sm"
-                              placeholder="e.g., gemini-2.5-flash"
-                          />
-                      </div>
-                      <div>
-                          <label htmlFor="apiKey" className="block text-xs font-medium text-gray-400 mb-1">API_KEY</label>
-                          <Input
-                              id="apiKey"
-                              type="password"
-                              value={apiKey}
-                              onChange={(e) => setApiKey(e.target.value)}
-                              disabled={isSimulating}
-                              className="!py-1.5 !text-sm"
-                              placeholder="Enter your API key"
-                          />
-                      </div>
-                    </div>
-                </Section>
-            </div>
+                ))}
+               </div>
+            </Section>
         </div>
 
-        <Section title="Handover Log (handover.json)" icon={<FileIcon className="w-5 h-5" />}>
-            <CodeBlock className="language-json" children={JSON.stringify(handover, null, 2)} />
-        </Section>
+        {/* Column 2: Handover Log & Container */}
+        <div className="flex flex-col gap-6 min-h-0">
+            <Section title="Handover Log (handover.json)" icon={<FileIcon className="w-5 h-5" />} className="flex-1">
+                <CodeBlock className="language-json" children={JSON.stringify(handover, null, 2)} />
+            </Section>
+
+            <Section title="Container" icon={<ContainerIcon className="w-5 h-5" />}>
+                <div className={`p-3 rounded-md border-l-4 mb-4 ${getStatusColor(containerInfo.status)}`}>
+                    <p className="font-bold uppercase">{containerInfo.status}</p>
+                    <p className="text-sm text-text-secondary truncate" title={containerInfo.id || undefined}>{containerInfo.id || 'No container'}</p>
+                </div>
+                <div className="space-y-3">
+                  <h4 className="text-sm font-semibold text-text-secondary">Environment Variables</h4>
+                  <div>
+                      <label htmlFor="apiName" className="block text-xs font-medium text-gray-400 mb-1">API_NAME</label>
+                      <Input
+                          id="apiName"
+                          type="text"
+                          value={apiName}
+                          onChange={(e) => setApiName(e.target.value)}
+                          disabled={isSimulating}
+                          className="!py-1.5 !text-sm"
+                          placeholder="e.g., gemini-2.5-flash"
+                      />
+                  </div>
+                  <div>
+                      <label htmlFor="apiKey" className="block text-xs font-medium text-gray-400 mb-1">API_KEY</label>
+                      <Input
+                          id="apiKey"
+                          type="password"
+                          value={apiKey}
+                          onChange={(e) => setApiKey(e.target.value)}
+                          disabled={isSimulating}
+                          className="!py-1.5 !text-sm"
+                          placeholder="Enter your API key"
+                      />
+                  </div>
+                </div>
+            </Section>
+        </div>
+
+        {/* Column 3: AI Suggestions */}
+        <div className="lg:col-span-2 xl:col-span-1">
+             <SuggestionPanel currentStep={currentStep} isSimulating={isSimulating} totalSteps={WORKFLOW.length} />
+        </div>
       </div>
     </div>
   );

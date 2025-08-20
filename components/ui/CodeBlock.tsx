@@ -3,9 +3,11 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import vscDarkPlus from 'react-syntax-highlighter/dist/esm/styles/prism/vsc-dark-plus';
 import { CopyIcon } from '../icons/CopyIcon';
 import { CheckIcon } from '../icons/CheckIcon';
+import { SaveIcon } from '../icons/SaveIcon';
 
 const CodeBlock = ({ node, inline, className, children, ...props }: any) => {
     const [isCopied, setIsCopied] = useState(false);
+    const [isSaved, setIsSaved] = useState(false);
     const match = /language-(\w+)/.exec(className || '');
     const codeString = String(children).replace(/\n$/, '');
 
@@ -14,6 +16,13 @@ const CodeBlock = ({ node, inline, className, children, ...props }: any) => {
             setIsCopied(true);
             setTimeout(() => setIsCopied(false), 2000);
         });
+    };
+
+    const handleSave = () => {
+        // In a real app, this would trigger a workflow. Here, we simulate it.
+        console.log("Saving code to container:", codeString);
+        setIsSaved(true);
+        setTimeout(() => setIsSaved(false), 2000);
     };
 
     if (inline) {
@@ -26,17 +35,35 @@ const CodeBlock = ({ node, inline, className, children, ...props }: any) => {
         <div className="relative my-2 bg-[#1e1e1e] rounded-lg shadow-lg">
             <div className="flex items-center justify-between px-4 py-1 bg-gray-700/50 rounded-t-lg border-b border-gray-600">
                 <span className="text-xs font-sans text-gray-300 capitalize">{language}</span>
-                <button
-                    className="inline-flex items-center gap-1.5 text-xs text-gray-300 hover:text-white disabled:opacity-50 transition-colors"
-                    onClick={handleCopy}
-                    disabled={isCopied}
-                >
-                    {isCopied ? (
-                        <><CheckIcon className="h-4 w-4 text-green-400" /> Copied!</>
-                    ) : (
-                        <><CopyIcon className="h-4 w-4" /> Copy code</>
-                    )}
-                </button>
+                <div className="flex items-center gap-4">
+                    <button
+                        className="inline-flex items-center gap-1.5 text-xs text-gray-300 hover:text-white disabled:opacity-100 transition-colors"
+                        onClick={handleSave}
+                        disabled={isSaved}
+                        title="Save to container"
+                    >
+                        {isSaved ? (
+                             <span className="inline-flex items-center gap-1.5 text-green-400">
+                                <CheckIcon className="h-4 w-4" /> Saved
+                            </span>
+                        ) : (
+                            <><SaveIcon className="h-4 w-4" /> Save</>
+                        )}
+                    </button>
+                    <button
+                        className="inline-flex items-center gap-1.5 text-xs text-gray-300 hover:text-white disabled:opacity-100 transition-colors"
+                        onClick={handleCopy}
+                        disabled={isCopied}
+                    >
+                        {isCopied ? (
+                            <span className="inline-flex items-center gap-1.5 text-green-400">
+                                <CheckIcon className="h-4 w-4" /> Copied!
+                            </span>
+                        ) : (
+                            <><CopyIcon className="h-4 w-4" /> Copy code</>
+                        )}
+                    </button>
+                </div>
             </div>
             <SyntaxHighlighter
                 {...props}
