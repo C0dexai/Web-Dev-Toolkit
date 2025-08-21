@@ -3,6 +3,8 @@ import { Assistant, Thread, Message as MessageType } from '../../types';
 import Message from './Message';
 import MessageInput from './MessageInput';
 import { StarIcon } from '../icons/StarIcon';
+import ConversationStartersDropdown from '../dropdowns/ConversationStartersDropdown';
+import { CodeBracketIcon } from '../icons/CodeBracketIcon';
 
 interface ChatPanelProps {
   assistant: Assistant;
@@ -23,6 +25,12 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ assistant, thread, messages, isSt
   useEffect(() => {
     scrollToBottom();
   }, [messages, isStreaming]);
+  
+  const handleEditInMonaco = () => {
+    // In a real application, this would open a modal with a Monaco editor instance,
+    // pre-filled with the conversation content for advanced editing.
+    alert('Simulating opening a contextual editor (e.g., Monaco) for advanced reformatting and conversion.');
+  }
 
   return (
     <div className="flex-1 flex flex-col h-full">
@@ -31,13 +39,25 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ assistant, thread, messages, isSt
           <h2 className="text-xl font-bold font-orbitron truncate">{assistant.name}</h2>
           <p className="text-sm text-text-secondary truncate" title={thread.title}>{thread.title}</p>
         </div>
-        <button
-          onClick={() => onToggleBookmark(thread.id)}
-          className="p-2 rounded-md text-gray-500 hover:text-yellow-400 opacity-60 hover:opacity-100 transition-all flex-shrink-0"
-          title={thread.isBookmarked ? 'Unbookmark thread' : 'Bookmark thread'}
-        >
-          <StarIcon solid={!!thread.isBookmarked} className={`h-6 w-6 ${thread.isBookmarked ? 'text-yellow-400' : ''}`} />
-        </button>
+        <div className="flex items-center gap-3 flex-shrink-0">
+            <ConversationStartersDropdown onSelectStarter={onSendMessage} />
+            
+            <button
+                onClick={handleEditInMonaco}
+                className="p-2 rounded-md text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors"
+                title="Edit in Contextual Editor"
+            >
+                <CodeBracketIcon className="h-6 w-6" />
+            </button>
+
+            <button
+              onClick={() => onToggleBookmark(thread.id)}
+              className="p-2 rounded-md text-gray-400 hover:text-yellow-400 hover:bg-yellow-400/10 transition-colors"
+              title={thread.isBookmarked ? 'Unbookmark thread' : 'Bookmark thread'}
+            >
+              <StarIcon solid={!!thread.isBookmarked} className={`h-6 w-6 ${thread.isBookmarked ? 'text-yellow-400' : 'text-gray-400'}`} />
+            </button>
+        </div>
       </header>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-6">
