@@ -1,5 +1,5 @@
-import { GoogleGenAI, Chat, Content } from "@google/genai";
-import { Message } from '../types';
+import { GoogleGenAI, Chat, Content, Part } from "@google/genai";
+import { Message, FileAttachment } from '../types';
 
 // This is a placeholder for the API key. In a real environment, this would be securely managed.
 const API_KEY = process.env.API_KEY;
@@ -29,9 +29,22 @@ export const createChat = (assistantInstructions: string, history: Message[]): C
 export async function* streamAssistantResponse(
   chat: Chat,
   newMessage: string,
+  files: FileAttachment[] = [],
 ): AsyncGenerator<string, void, unknown> {
   try {
-    const result = await chat.sendMessageStream({ message: newMessage });
+    const content: (string | Part)[] = [newMessage];
+    
+    files.forEach(file => {
+      content.push({
+        inlineData: {
+          mimeType: file.mimeType,
+          data: file.content,
+        }
+      });
+    });
+
+    // FIX: The `message` parameter for `sendMessageStream` should be the array of parts directly, not an object with a `parts` property.
+    const result = await chat.sendMessageStream({ message: content });
 
     for await (const chunk of result) {
       if(chunk.text) {

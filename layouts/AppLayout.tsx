@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import { Assistant, Thread, Message, OpenAI_Assistant, GeminiAssistant } from '../types';
+import { Assistant, Thread, Message, OpenAI_Assistant, GeminiAssistant, ToolCall, FileAttachment } from '../types';
 import AssistantsPanel from '../components/sidebar/AssistantsPanel';
 import MainContent from '../components/main/MainContent';
 import * as geminiService from '../services/geminiService';
@@ -145,6 +145,7 @@ const AppLayout: React.FC = () => {
   const [assistants, setAssistants] = useState<Assistant[]>(defaultAssistants);
   const [threads, setThreads] = useState<Record<string, Thread[]>>(defaultThreads);
   const [messages, setMessages] = useState<Record<string, Message[]>>(defaultMessages);
+  const [threadFiles, setThreadFiles] = useState<Record<string, File[]>>({});
   
   const [selectedAssistantId, setSelectedAssistantId] = useState<string | null>(null);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
@@ -267,8 +268,25 @@ const AppLayout: React.FC = () => {
         delete newMessages[threadId];
         return newMessages;
     });
+    setThreadFiles(prev => {
+        const newThreadFiles = { ...prev };
+        delete newThreadFiles[threadId];
+        return newThreadFiles;
+    });
     if (selectedThreadId === threadId) setSelectedThreadId(null);
   }, [selectedAssistantId, selectedThreadId]);
+  
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => {
+        const result = (reader.result as string).split(',')[1];
+        resolve(result);
+      };
+      reader.onerror = error => reject(error);
+    });
+  };
 
   const handleSendMessage = useCallback(async (content: string) => {
     const thread = currentThreads.find(t => t.id === selectedThreadId);
@@ -281,34 +299,99 @@ const AppLayout: React.FC = () => {
     setIsStreaming(true);
     setError(null);
     const assistantMessageId = `msg_${Date.now() + 1}`;
-    const assistantMessage: Message = { id: assistantMessageId, role: 'assistant', content: '', createdAt: Date.now() + 1 };
+    const assistantMessage: Message = { id: assistantMessageId, role: 'assistant', content: '', createdAt: Date.now() + 1, tool_calls: [] };
     setMessages(prev => ({ ...prev, [selectedThreadId]: [...(prev[selectedThreadId] || []), assistantMessage] }));
 
     try {
-      let responseStream;
       if (selectedAssistant.provider === 'gemini') {
+        const filesForThread = threadFiles[selectedThreadId] || [];
+        const attachments: FileAttachment[] = await Promise.all(
+            filesForThread.map(async (file) => ({
+                name: file.name,
+                mimeType: file.type,
+                content: await fileToBase64(file),
+            }))
+        );
+
         const chat = geminiService.createChat(selectedAssistant.instructions, history);
-        responseStream = geminiService.streamAssistantResponse(chat, content);
-      } else {
-        responseStream = openAiService.streamAssistantResponse(thread.openAiThreadId!, selectedAssistant.openAiAssistantId, content);
-      }
-      for await (const chunk of responseStream) {
-        setMessages(prev => {
-            const currentThreadMessages = prev[selectedThreadId] || [];
-            return { ...prev, [selectedThreadId]: currentThreadMessages.map(m => m.id === assistantMessageId ? { ...m, content: m.content + chunk } : m) }
-        });
+        const responseStream = geminiService.streamAssistantResponse(chat, content, attachments);
+
+        for await (const chunk of responseStream) {
+          setMessages(prev => {
+              const currentThreadMessages = prev[selectedThreadId] || [];
+              return { ...prev, [selectedThreadId]: currentThreadMessages.map(m => m.id === assistantMessageId ? { ...m, content: m.content + chunk } : m) }
+          });
+        }
+      } else if (selectedAssistant.provider === 'openai') {
+        const responseStream = openAiService.streamAssistantResponse(thread.openAiThreadId!, selectedAssistant.openAiAssistantId, content);
+        for await (const chunk of responseStream) {
+            setMessages(prev => {
+                const currentThreadMessages = prev[selectedThreadId] || [];
+                
+                const updateMessage = (msg: Message): Message => {
+                    if (msg.id !== assistantMessageId) return msg;
+
+                    let newMsg = { ...msg };
+
+                    switch (chunk.type) {
+                        case 'textDelta':
+                            newMsg.content += chunk.value;
+                            break;
+                        case 'toolStart':
+                            if (chunk.toolCallId && !newMsg.tool_calls?.some(tc => tc.id === chunk.toolCallId)) {
+                                const newToolCall: ToolCall = { id: chunk.toolCallId, type: 'code_interpreter', input: '', outputs: [] };
+                                newMsg.tool_calls = [...(newMsg.tool_calls || []), newToolCall];
+                            }
+                            break;
+                        case 'toolCodeDelta':
+                            if (chunk.toolCallId && chunk.value) {
+                                newMsg.tool_calls = (newMsg.tool_calls || []).map(tc => 
+                                    tc.id === chunk.toolCallId ? { ...tc, input: tc.input + chunk.value } : tc
+                                );
+                            }
+                            break;
+                        case 'toolOutputDelta':
+                            if (chunk.toolCallId && chunk.value && chunk.index !== undefined) {
+                                newMsg.tool_calls = (newMsg.tool_calls || []).map(tc => {
+                                    if (tc.id !== chunk.toolCallId) return tc;
+                                    const newOutputs = [...tc.outputs];
+                                    
+                                    // Ensure output object at index exists
+                                    while (newOutputs.length <= chunk.index) {
+                                        newOutputs.push({type: 'logs', content: ''});
+                                    }
+
+                                    // Check if it's a log output (can be extended for images later)
+                                    if (newOutputs[chunk.index].type === 'logs') {
+                                        newOutputs[chunk.index].content += chunk.value;
+                                    }
+                                    
+                                    return { ...tc, outputs: newOutputs };
+                                });
+                            }
+                            break;
+                        case 'error':
+                            newMsg.content += chunk.value;
+                            break;
+                    }
+                    return newMsg;
+                }
+
+                return { ...prev, [selectedThreadId!]: currentThreadMessages.map(updateMessage) };
+            });
+        }
       }
     } catch (e) {
         const errorMessage = e instanceof Error ? e.message : 'An unknown error occurred.';
         setError(errorMessage);
         setMessages(prev => {
             const currentThreadMessages = prev[selectedThreadId] || [];
-            return { ...prev, [selectedThreadId]: currentThreadMessages.map(m => m.id === assistantMessageId ? { ...m, content: `Error: ${errorMessage}` } : m) }
+            return { ...prev, [selectedThreadId]: currentThreadMessages.map(m => m.id === assistantMessageId ? { ...m, content: m.content + `\nError: ${errorMessage}` } : m) }
         });
     } finally {
       setIsStreaming(false);
     }
-  }, [selectedThreadId, selectedAssistant, messages, isStreaming, currentThreads]);
+  }, [selectedThreadId, selectedAssistant, messages, isStreaming, currentThreads, threadFiles]);
   
   const handleToggleBookmark = useCallback((threadId: string) => {
     if (!selectedAssistantId) return;
@@ -331,6 +414,20 @@ const AppLayout: React.FC = () => {
     if(selectedAssistant?.provider === 'openai' && updates.instructions){
         openAiService.updateAssistant(selectedAssistant.openAiAssistantId, {instructions: updates.instructions});
     }
+  };
+
+  const addFileToThread = (threadId: string, file: File) => {
+    setThreadFiles(prev => ({
+        ...prev,
+        [threadId]: [...(prev[threadId] || []), file]
+    }));
+  };
+
+  const removeFileFromThread = (threadId: string, fileName: string) => {
+    setThreadFiles(prev => ({
+        ...prev,
+        [threadId]: (prev[threadId] || []).filter(f => f.name !== fileName)
+    }));
   };
   
   const NavButton = ({ title, isActive, onClick, children }: { title: string, isActive: boolean, onClick: () => void, children: React.ReactNode }) => (
@@ -370,7 +467,23 @@ const AppLayout: React.FC = () => {
             
             <main className="flex-1 flex flex-col glass min-w-0">
                 {selectedAssistant ? (
-                <MainContent key={selectedAssistant.id} assistant={selectedAssistant} threads={currentThreads} messages={currentMessages} selectedThreadId={selectedThreadId} onSelectThread={setSelectedThreadId} onCreateThread={handleCreateThread} onDeleteThread={handleDeleteThread} isStreaming={isStreaming} onSendMessage={handleSendMessage} onUpdateAssistant={handleUpdateAssistant} onToggleBookmark={handleToggleBookmark} />
+                <MainContent 
+                    key={selectedAssistant.id} 
+                    assistant={selectedAssistant} 
+                    threads={currentThreads} 
+                    messages={currentMessages} 
+                    selectedThreadId={selectedThreadId} 
+                    onSelectThread={setSelectedThreadId} 
+                    onCreateThread={handleCreateThread} 
+                    onDeleteThread={handleDeleteThread} 
+                    isStreaming={isStreaming} 
+                    onSendMessage={handleSendMessage} 
+                    onUpdateAssistant={handleUpdateAssistant} 
+                    onToggleBookmark={handleToggleBookmark}
+                    threadFiles={threadFiles}
+                    onAddFileToThread={addFileToThread}
+                    onRemoveFileFromThread={removeFileFromThread}
+                />
                 ) : ( <WelcomeScreen /> )}
             </main>
             </>

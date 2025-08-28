@@ -9,6 +9,7 @@ import Tabs from '../ui/Tabs';
 import { ChatBubbleIcon } from '../icons/ChatBubbleIcon';
 import { ChevronLeftIcon } from '../icons/ChevronLeftIcon';
 import { ChevronRightIcon } from '../icons/ChevronRightIcon';
+import GeminiFilesPanel from './GeminiFilesPanel';
 
 interface MainContentProps {
   assistant: Assistant;
@@ -22,22 +23,26 @@ interface MainContentProps {
   isStreaming: boolean;
   onSendMessage: (content: string) => void;
   onUpdateAssistant: (id: string, updates: Partial<Assistant>) => void;
+  threadFiles: Record<string, File[]>;
+  onAddFileToThread: (threadId: string, file: File) => void;
+  onRemoveFileFromThread: (threadId: string, fileName: string) => void;
 }
 
 const MainContent: React.FC<MainContentProps> = (props) => {
   const [activeTab, setActiveTab] = useState('chat');
   const [isThreadsPanelCollapsed, setIsThreadsPanelCollapsed] = useState(false);
   
-  const { assistant, threads, selectedThreadId, onSelectThread, onCreateThread, onDeleteThread, onToggleBookmark } = props;
+  const { assistant, threads, selectedThreadId, onSelectThread, onCreateThread, onDeleteThread, onToggleBookmark, threadFiles, onAddFileToThread, onRemoveFileFromThread } = props;
 
   const tabs = [
     { id: 'chat', label: 'Chat' },
-    { id: 'files', label: 'Knowledge Files', disabled: assistant.provider !== 'openai' },
+    { id: 'files', label: 'Context Files' },
     { id: 'sandbox', label: 'Sandbox', disabled: assistant.provider !== 'openai' },
     { id: 'settings', label: 'Settings' },
   ];
   
   const currentThread = threads.find(t => t.id === selectedThreadId);
+  const currentThreadFiles = selectedThreadId ? threadFiles[selectedThreadId] || [] : [];
 
   return (
     <div className="flex flex-col h-full">
@@ -100,6 +105,14 @@ const MainContent: React.FC<MainContentProps> = (props) => {
         )}
         {activeTab === 'files' && assistant.provider === 'openai' && (
           <FilesPanel assistant={assistant as OpenAI_Assistant} />
+        )}
+        {activeTab === 'files' && assistant.provider === 'gemini' && (
+            <GeminiFilesPanel 
+                threadId={selectedThreadId}
+                files={currentThreadFiles}
+                onAddFile={onAddFileToThread}
+                onRemoveFile={onRemoveFileFromThread}
+            />
         )}
         {activeTab === 'sandbox' && assistant.provider === 'openai' && (
           <SandboxPanel assistant={assistant as OpenAI_Assistant} />

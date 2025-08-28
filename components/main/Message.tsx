@@ -1,17 +1,70 @@
 import React, { useState } from 'react';
-import { Message as MessageType } from '../../types';
+import { Message as MessageType, ToolCall } from '../../types';
 import { RobotIcon } from '../icons/RobotIcon';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import CodeBlock from '../ui/CodeBlock';
 import { CopyIcon } from '../icons/CopyIcon';
 import { CheckIcon } from '../icons/CheckIcon';
+import { CodeBracketIcon } from '../icons/CodeBracketIcon';
+import { ChevronDownIcon } from '../icons/ChevronDownIcon';
+import { ChevronUpIcon } from '../icons/ChevronUpIcon';
 
 
 interface MessageProps {
   message: MessageType;
   isStreaming: boolean;
 }
+
+const ToolCallDisplay: React.FC<{ toolCall: ToolCall }> = ({ toolCall }) => {
+    const [isOpen, setIsOpen] = useState(true);
+
+    if (toolCall.type !== 'code_interpreter') return null;
+
+    const hasContent = toolCall.input || toolCall.outputs.length > 0;
+    if (!hasContent) return null;
+
+    return (
+        <div className="my-2 bg-black/20 rounded-lg border border-border">
+            <button 
+                className="w-full flex justify-between items-center p-2 bg-surface/50 rounded-t-lg"
+                onClick={() => setIsOpen(!isOpen)}
+                aria-expanded={isOpen}
+            >
+                <div className="flex items-center gap-2">
+                    <CodeBracketIcon className="w-5 h-5 text-text-secondary" />
+                    <span className="font-semibold text-sm">Code Interpreter</span>
+                </div>
+                {isOpen ? <ChevronUpIcon className="w-5 h-5" /> : <ChevronDownIcon className="w-5 h-5" />}
+            </button>
+            {isOpen && (
+                <div className="p-2 border-t border-border">
+                    {toolCall.input && (
+                      <div className="mb-2">
+                          <p className="text-xs text-text-secondary mb-1 px-1">Input</p>
+                          <CodeBlock className="language-python" children={toolCall.input} />
+                      </div>
+                    )}
+                    {toolCall.outputs.length > 0 && (
+                        <div>
+                            <p className="text-xs text-text-secondary mb-1 px-1">Output</p>
+                            {toolCall.outputs.map((output, index) => (
+                                <div key={index}>
+                                    {output.type === 'logs' && (
+                                        <pre className="bg-black/50 p-2 rounded-md text-xs text-text-primary whitespace-pre-wrap font-mono">
+                                            {output.content}
+                                        </pre>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+};
+
 
 const Message: React.FC<MessageProps> = ({ message, isStreaming }) => {
   const [isCopied, setIsCopied] = useState(false);
@@ -35,6 +88,9 @@ const Message: React.FC<MessageProps> = ({ message, isStreaming }) => {
       </div>
       <div className={`rounded-lg max-w-3xl w-fit shadow-lg ${isUser ? 'bg-gradient-to-br from-pink-500 to-violet-600 text-white' : 'bg-surface/80 text-text-primary'}`}>
          <div className="px-4 py-3 markdown-container">
+            {!isUser && message.tool_calls && message.tool_calls.map((tc) => (
+                <ToolCallDisplay key={tc.id} toolCall={tc} />
+            ))}
             <ReactMarkdown
                 children={message.content + (isStreaming ? '▍' : '')}
                 remarkPlugins={[remarkGfm]}

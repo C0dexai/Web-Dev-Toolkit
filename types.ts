@@ -29,11 +29,24 @@ export interface Thread {
   isBookmarked?: boolean;
 }
 
+export interface ToolOutput {
+  type: 'logs';
+  content: string;
+}
+
+export interface ToolCall {
+  id: string;
+  type: 'code_interpreter';
+  input: string;
+  outputs: ToolOutput[];
+}
+
 export interface Message {
   id:string;
   role: 'user' | 'assistant';
   content: string;
   createdAt: number;
+  tool_calls?: ToolCall[];
 }
 
 export interface VectorStoreFile {
@@ -61,4 +74,10 @@ export interface GoogleUserProfile {
     email: string;
     name: string;
     picture: string;
+}
+
+export interface FileAttachment {
+  name: string;
+  mimeType: string;
+  content: string; // base64 encoded string
 }

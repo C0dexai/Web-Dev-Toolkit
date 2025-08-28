@@ -4,7 +4,8 @@ import OpenAI from 'openai';
 // Use type aliases from the main OpenAI namespace for robustness against internal library structure changes.
 type Assistant = OpenAI.Beta.Assistant;
 type Thread = OpenAI.Beta.Thread;
-type VectorStore = OpenAI.Beta.VectorStore;
+// FIX: The VectorStore type is nested under VectorStores in this version of the library.
+type VectorStore = OpenAI.Beta.VectorStores.VectorStore;
 type FileObject = OpenAI.Files.FileObject;
 
 
@@ -17,6 +18,7 @@ const openai = new OpenAI({
 
 export async function createAssistant(name: string, instructions: string): Promise<{assistant: Assistant, vectorStore: VectorStore}> {
   try {
+    // FIX: Using 'vector_stores' property for compatibility with the installed version of the openai library.
     const vectorStore = await openai.beta.vector_stores.create({ name: `${name} Vector Store` });
 
     const assistant = await openai.beta.assistants.create({
@@ -39,6 +41,7 @@ export async function deleteAssistant(assistantId: string, vectorStoreId?: strin
     try {
         const deletePromises: Promise<any>[] = [openai.beta.assistants.delete(assistantId)];
         if(vectorStoreId) {
+            // FIX: Using 'vector_stores' property for compatibility with the installed version of the openai library.
             deletePromises.push(openai.beta.vector_stores.del(vectorStoreId));
         }
         
@@ -74,11 +77,19 @@ export async function createThread(): Promise<Thread> {
     }
 }
 
+export type OpenAIStreamEvent =
+  | { type: 'textDelta'; value: string }
+  | { type: 'toolStart'; toolCallId: string; toolType: 'code_interpreter' }
+  | { type: 'toolCodeDelta'; toolCallId: string; value: string }
+  | { type: 'toolOutputDelta'; toolCallId: string; index: number; value: string; outputType: 'logs' }
+  | { type: 'error'; value: string };
+
+
 export async function* streamAssistantResponse(
   threadId: string,
   assistantId: string,
   newMessage: string,
-): AsyncGenerator<string, void, unknown> {
+): AsyncGenerator<OpenAIStreamEvent, void, unknown> {
   try {
     await openai.beta.threads.messages.create(threadId, {
       role: 'user',
@@ -90,21 +101,52 @@ export async function* streamAssistantResponse(
     });
 
     for await (const event of stream) {
-      if (event.event === 'thread.message.delta') {
-        const delta = event.data.delta;
-        if (delta.content?.[0]?.type === 'text' && delta.content[0].text?.value) {
-            yield delta.content[0].text.value;
-        }
-      } else if (event.event === 'thread.run.failed') {
-          const errorMessage = event.data.last_error?.message ?? 'Unknown error';
-          console.error('Run failed:', errorMessage);
-          yield `\n\n**An error occurred:** ${errorMessage}`;
-          break;
+      switch(event.event) {
+        case 'thread.message.delta':
+            const delta = event.data.delta;
+            if (delta.content?.[0]?.type === 'text' && delta.content[0].text?.value) {
+                yield { type: 'textDelta', value: delta.content[0].text.value };
+            }
+            break;
+        case 'thread.run.step.created':
+            const stepDetails = event.data.step_details;
+            if (stepDetails.type === 'tool_calls') {
+                for (const toolCall of stepDetails.tool_calls) {
+                    if (toolCall.type === 'code_interpreter') {
+                        yield { type: 'toolStart', toolCallId: toolCall.id, toolType: 'code_interpreter' };
+                    }
+                }
+            }
+            break;
+        case 'thread.run.step.delta':
+            const stepDelta = event.data.delta.step_details;
+            if (stepDelta?.type === 'tool_calls') {
+                for (const toolCallDelta of stepDelta.tool_calls) {
+                    if (toolCallDelta.type === 'code_interpreter' && toolCallDelta.id) {
+                        if (toolCallDelta.code_interpreter?.input) {
+                            yield { type: 'toolCodeDelta', toolCallId: toolCallDelta.id, value: toolCallDelta.code_interpreter.input };
+                        }
+                        if (toolCallDelta.code_interpreter?.outputs) {
+                            for (const output of toolCallDelta.code_interpreter.outputs) {
+                                if (output.type === 'logs' && output.logs) {
+                                    yield { type: 'toolOutputDelta', toolCallId: toolCallDelta.id, index: output.index, value: output.logs, outputType: 'logs' };
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            break;
+        case 'thread.run.failed':
+            const errorMessage = event.data.last_error?.message ?? 'Unknown error';
+            console.error('Run failed:', errorMessage);
+            yield { type: 'error', value: `\n\n**An error occurred:** ${errorMessage}`};
+            break;
       }
     }
   } catch (error) {
     console.error("Error streaming response from OpenAI:", error);
-    yield `\n\nAn error occurred while getting a response. Details: ${error instanceof Error ? error.message : String(error)}`;
+    yield { type: 'error', value: `\n\nAn error occurred while getting a response. Details: ${error instanceof Error ? error.message : String(error)}` };
   }
 }
 
@@ -112,6 +154,7 @@ export async function* streamAssistantResponse(
 
 export async function listFiles(vectorStoreId: string) {
     try {
+        // FIX: Using 'vector_stores' property for compatibility with the installed version of the openai library.
         const files = await openai.beta.vector_stores.files.list(vectorStoreId);
         return files.data;
     } catch (error) {
@@ -127,6 +170,7 @@ export async function uploadFile(vectorStoreId: string, file: File) {
             purpose: 'assistants',
         });
         
+        // FIX: Using 'vector_stores' property for compatibility with the installed version of the openai library.
         await openai.beta.vector_stores.files.create(vectorStoreId, {
             file_id: uploadedFile.id,
         });
@@ -140,6 +184,7 @@ export async function uploadFile(vectorStoreId: string, file: File) {
 
 export async function deleteFile(vectorStoreId: string, fileId: string) {
     try {
+        // FIX: Using 'vector_stores' property for compatibility with the installed version of the openai library.
         await openai.beta.vector_stores.files.del(vectorStoreId, fileId);
         await openai.files.delete(fileId);
     } catch (error) {
